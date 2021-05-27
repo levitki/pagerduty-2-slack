@@ -1,0 +1,31 @@
+services:
+  - docker:dind
+variables:
+  DOCKER_DRIVER: overlay
+ 
+stages:
+- execute
+
+rotateOncallTeam_1:
+  stage: execute
+
+  image: dockerhub.image_path:stable
+  script:
+    - chmod a+x push_into_slack_group.sh
+    - ./push_into_slack_group.sh PXXXXXX PYYYYYY 'Team_1 on-call'
+  only:
+    - master
+  tags:
+    - eks-eu-central-2-your_cluster
+
+
+rotateOncallTeam_2:
+  stage: execute
+  image: dockerhub.image_path:stable
+  script:
+    - chmod a+x push_into_slack_group.sh
+    - ./push_into_slack_group.sh PZZZZZZ PUUUUUU 'Team_2 on-call'
+  only:
+    - master
+  tags:
+    - eks-eu-central-2-your_cluster
