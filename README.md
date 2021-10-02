@@ -11,6 +11,6 @@ The enviromental variables:
  
  SLACK_TOKEN
  
-should be defined in and securely stored in advance 
+should be defined e.g. in enviromental variables and securely stored in advance 
 
 ...
