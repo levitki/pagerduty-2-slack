@@ -1,23 +1,85 @@
 variables:
   DOCKER_DRIVER: overlay
- 
+  # Use custom Docker image with pre-installed dependencies
+  SYNC_IMAGE: alpine:3.19
+
 stages:
+  - test
   - execute
+
+# Reusable before_script for installing dependencies
+.install_dependencies: &install_dependencies
+  - apk add --no-cache curl jq bash coreutils
+
+# Test stage - validate script before execution
+test:shellcheck:
+  stage: test
+  image: koalaman/shellcheck-alpine:stable
+  script:
+    - shellcheck push_into_slack_group.sh
+  only:
+    - merge_requests
+    - master
+
+test:unit:
+  stage: test
+  image: ${SYNC_IMAGE}
+  before_script:
+    - *install_dependencies
+  script:
+    - chmod a+x tests/test_script.sh
+    - chmod a+x push_into_slack_group.sh
+    - ./tests/test_script.sh
+  only:
+    - merge_requests
+    - master
+
+# Health check job - runs before sync to validate API connectivity
+health_check:
+  stage: test
+  image: ${SYNC_IMAGE}
+  before_script:
+    - *install_dependencies
+  script:
+    - chmod a+x push_into_slack_group.sh
+    - ./push_into_slack_group.sh --health-check
+  only:
+    - schedules
+    - master
+  retry:
+    max: 2
+    when:
+      - api_failure
+      - runner_system_failure
 
 # Common template for on-call rotation jobs
 .rotate_template:
   stage: execute
-  image: alpine:latest
+  image: ${SYNC_IMAGE}
   before_script:
-    - apk add --no-cache curl jq bash
+    - *install_dependencies
   script:
     - chmod a+x push_into_slack_group.sh
-    - ./push_into_slack_group.sh $PRIMARY_SCHEDULE $SECONDARY_SCHEDULE "$SLACK_GROUP"
+    # Use verbose mode for better debugging in CI logs
+    - |
+      ./push_into_slack_group.sh \
+        --verbose \
+        --cache-ttl 300 \
+        --max-retries 3 \
+        $PRIMARY_SCHEDULE $SECONDARY_SCHEDULE "$SLACK_GROUP"
   only:
+    - schedules
     - master
-  tags:
-    - eks-eu-central-2-your_cluster
+  retry:
+    max: 2
+    when:
+      - api_failure
+      - runner_system_failure
+  # Track job duration for monitoring
+  after_script:
+    - echo "Job completed in $SECONDS seconds"
 
+# Option 1: Individual team jobs (backward compatible)
 rotateOncallTeam_1:
   extends: .rotate_template
   variables:
@@ -31,3 +93,72 @@ rotateOncallTeam_2:
     PRIMARY_SCHEDULE: "PZZZZZZ"
     SECONDARY_SCHEDULE: "PUUUUUU"
     SLACK_GROUP: "Team_2 on-call"
+
+# Option 2: Matrix/parallel jobs using YAML anchors
+# Uncomment this section to use parallel execution for multiple teams
+#
+# .teams_config:
+#   parallel:
+#     matrix:
+#       - TEAM_NAME: "Team Alpha"
+#         PRIMARY_SCHEDULE: "P123456"
+#         SECONDARY_SCHEDULE: "P654321"
+#         SLACK_GROUP: "oncall-team-alpha"
+#       - TEAM_NAME: "Team Beta"
+#         PRIMARY_SCHEDULE: "PABCDEF"
+#         SECONDARY_SCHEDULE: "PGHIJKL"
+#         SLACK_GROUP: "oncall-team-beta"
+#       - TEAM_NAME: "Team Gamma"
+#         PRIMARY_SCHEDULE: "PMNOPQR"
+#         SECONDARY_SCHEDULE: "PSTUVWX"
+#         SLACK_GROUP: "oncall-team-gamma"
+#
+# rotate_all_teams:
+#   extends:
+#     - .rotate_template
+#     - .teams_config
+
+# Manual dry-run job for testing
+dry_run:
+  extends: .rotate_template
+  script:
+    - chmod a+x push_into_slack_group.sh
+    - |
+      ./push_into_slack_group.sh \
+        --dry-run \
+        --verbose \
+        $PRIMARY_SCHEDULE $SECONDARY_SCHEDULE "$SLACK_GROUP"
+  when: manual
+  only:
+    - master
+# Monitoring job - send metrics to external system (example)
+# Uncomment and configure for your monitoring solution
+#
+# send_metrics:
+#   stage: execute
+#   image: alpine:3.19
+#   before_script:
+#     - apk add --no-cache curl
+#   script:
+#     # Example: Push metrics to Prometheus Pushgateway
+#     - |
+#       echo "pd2slack_sync_success 1" | curl --data-binary @- \
+#         http://pushgateway:9091/metrics/job/pd2slack
+#   only:
+#     - schedules
+#   when: on_success
+#
+# alert_on_failure:
+#   stage: execute
+#   image: alpine:3.19
+#   before_script:
+#     - apk add --no-cache curl
+#   script:
+#     # Example: Send alert to Slack webhook
+#     - |
+#       curl -X POST $ALERT_WEBHOOK_URL \
+#         -H 'Content-Type: application/json' \
+#         -d '{"text":"PagerDuty sync failed!"}'
+#   only:
+#     - schedules
+#   when: on_failure

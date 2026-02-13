@@ -1,0 +1,8 @@
+# shellcheck configuration for push_into_slack_group.sh
+
+# Disable SC2312: Consider invoking this command separately to avoid masking its return value
+disable=SC2312
+
+# Disable SC2155: Declare and assign separately to avoid masking return values
+# (We use proper error handling with 'set -e' and explicit checks)
+disable=SC2155

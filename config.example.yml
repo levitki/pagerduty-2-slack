@@ -1,0 +1,72 @@
+# Example Configuration for PagerDuty to Slack Sync
+#
+# This file demonstrates how to configure the sync tool using environment
+# variables or a configuration file. Copy this file to config.yml and customize.
+
+# API Configuration
+api:
+  pagerduty:
+    token: "${PAGER_TOKEN}"  # Or set directly: "pdpat_xxxxxxxxxxxxxxxxxxxx"
+    base_url: "https://api.pagerduty.com"
+    timeout: 30
+  
+  slack:
+    token: "${SLACK_TOKEN}"  # Or set directly: "xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx"
+    base_url: "https://slack.com/api"
+    timeout: 30
+
+# Cache Configuration
+cache:
+  enabled: true
+  directory: "/tmp/pd2slack-cache"
+  ttl: 300  # Time to live in seconds (5 minutes)
+
+# Retry Configuration
+retry:
+  max_attempts: 3
+  initial_delay: 1  # Initial delay in seconds
+  backoff_multiplier: 2  # Exponential backoff multiplier
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, VERBOSE, INFO, WARN, ERROR
+  format: "text"  # text or json
+  file: ""  # Optional log file path
+
+# Behavior Configuration
+behavior:
+  dry_run: false
+  continue_on_error: false
+
+# Team Configurations
+# You can define multiple teams here and sync them all
+teams:
+  - name: "Team Alpha"
+    primary_schedule_id: "P123456"
+    secondary_schedule_id: "P654321"
+    slack_group: "oncall-team-alpha"
+    
+  - name: "Team Beta"
+    primary_schedule_id: "PABCDEF"
+    secondary_schedule_id: "PGHIJKL"
+    slack_group: "oncall-team-beta"
+    
+  - name: "Team Gamma"
+    primary_schedule_id: "PMNOPQR"
+    secondary_schedule_id: "PSTUVWX"
+    slack_group: "oncall-team-gamma"
+
+# Monitoring Configuration (optional)
+monitoring:
+  enabled: false
+  # Prometheus push gateway
+  prometheus:
+    url: "http://localhost:9091"
+    job: "pd2slack"
+  
+  # Datadog
+  datadog:
+    api_key: "${DD_API_KEY}"
+    tags:
+      - "service:pd2slack"
+      - "env:production"
